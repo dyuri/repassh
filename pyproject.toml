@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "repassh"
+version = "0.1.0"
+description = "SSH wrapper to load private keys on first execution"
+authors = ["Gyuri Horak <dyuri@horak.hu>"]
+repository = "https://github.com/dyuri/repassh"
+license = "MIT"
+readme = "README.md"
+classifiers=[
+    'Environment :: Console',
+    'Intended Audience :: End Users/Desktop',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python'
+]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+
+[tool.poetry.scripts]
+repassh = 'repassh:sshcmd'
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
