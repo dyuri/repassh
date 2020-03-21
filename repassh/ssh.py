@@ -145,7 +145,9 @@ class Config:
             sys.exit(exit_code)
 
         if exit_code:
-            self.print(f"ERROR [{exit_code}]", file=sys.stderr, loglevel=LOG_ERROR)
+            self.print(f"ERROR [{exit_code}]", file=sys.stderr, loglevel=LOG_INFO)
+
+        return exit_code
 
 
 def find_identity_in_list(elements, identities):
@@ -520,7 +522,8 @@ class AgentManager:
                 self.agent_file, self.config.get("BINARY_SSH"),
                 additional_flags, self.escape_shell_arguments(argv))]
         exit_code = os.spawnv(os.P_WAIT, "/bin/sh", command)
-        self.config.exit(exit_code)
+
+        return self.config.exit(exit_code)
 
 
 def autodetect_binary(argv, config):
