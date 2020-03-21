@@ -84,10 +84,13 @@ class Config:
         # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
         # use 0 to disable ALL output (not recommended!)
         "VERBOSITY": LOG_INFO,
+
+        # If executed from python code, we should not use `sys.exit` to exit
+        "SYSEXIT": True,
     }
 
-    def __init__(self):
-        self.values = {}
+    def __init__(self, cfg={}):
+        self.values = cfg
 
     def load(self):
         """Load configurations from the default user file."""
@@ -97,7 +100,8 @@ class Config:
             variables = json.load(open(path))
         except IOError:
             return self
-        self.values = variables
+
+        self.values.update(variables)
         return self
 
     @staticmethod
@@ -118,7 +122,7 @@ class Config:
 
         print("Parameter '{0}' needs to be defined in "
               "config file or defaults".format(parameter), file=sys.stderr)
-        sys.exit(2)
+        self.exit(2)
 
     def set(self, parameter, value):
         """Sets configuration option parameter to value."""
@@ -134,6 +138,14 @@ class Config:
 
         if loglevel <= verbosity:
             print(*args, **kwargs)
+
+    def exit(self, exit_code):
+        """Based on configuration, calls `sys.exit` or simply logs the `exit_code`."""
+        if self.get("SYSEXIT"):
+            sys.exit(exit_code)
+
+        if exit_code:
+            self.print(f"ERROR [{exit_code}]", file=sys.stderr, loglevel=LOG_ERROR)
 
 
 def find_identity_in_list(elements, identities):
@@ -507,7 +519,8 @@ class AgentManager:
             ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
                 self.agent_file, self.config.get("BINARY_SSH"),
                 additional_flags, self.escape_shell_arguments(argv))]
-        os.execv("/bin/sh", command)
+        exit_code = os.spawnv(os.P_WAIT, "/bin/sh", command)
+        self.config.exit(exit_code)
 
 
 def autodetect_binary(argv, config):
@@ -604,7 +617,17 @@ def autodetect_binary(argv, config):
             other way.""")
 
         config.print(message.format(argv[0], os.environ['PATH']), loglevel=LOG_ERROR)
-        sys.exit(255)
+        config.exit(255)
+
+
+def check_exit(argv, config):
+    # if `repassh` is used from `python` or `xonsh` `sys.exit` should not be used
+    runtime_name = argv[0]
+    binary_name = os.path.basename(runtime_name)
+    if binary_name in ['', 'python', 'xonsh']:
+        config.print(f"`repassh` was invoked by `{binary_name}`, not using `sys.exit`.",
+                     loglevel=LOG_DEBUG)
+        config.set('SYSEXIT', False)
 
 
 def parse_command_line(argv, config):
@@ -633,7 +656,7 @@ def parse_command_line(argv, config):
                 break
 
 
-def main(argv):
+def main(argv, cfg={}):
     """Main method"""
     # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
     # that use ssh in case we error out or similar.
@@ -643,9 +666,10 @@ def main(argv):
     except IOError:
         pass
 
-    config = Config().load()
-
+    config = Config(cfg).load()
+    check_exit(argv, config)
     autodetect_binary(argv, config)
+
     # Check that BINARY_SSH is not repassh.
     # This can happen if the user sets a binary name only (e.g. 'scp') and a
     # symlink with the same name was set up.
@@ -654,20 +678,22 @@ def main(argv):
     # name if found in a path.
     binary_path = os.path.realpath(
         distutils.spawn.find_executable(config.get("BINARY_SSH")))
-    ssh_ident_path = os.path.realpath(
-        distutils.spawn.find_executable(argv[0]))
-    if binary_path == ssh_ident_path:
-        message = textwrap.dedent("""\
-        repassh found '{0}' as the next command to run.
-        Based on argv[0] ({1}), it seems like this will create a
-        loop.
 
-        Please use BINARY_SSH, BINARY_DIR, or change the way
-        repassh is invoked (eg, a different argv[0]) to make
-        it work correctly.""")
+    if argv[0]:
+        ssh_ident_path = os.path.realpath(
+            distutils.spawn.find_executable(argv[0]))
+        if binary_path == ssh_ident_path:
+            message = textwrap.dedent("""\
+            repassh found '{0}' as the next command to run.
+            Based on argv[0] ({1}), it seems like this will create a
+            loop.
 
-        config.print(message.format(config.get("BINARY_SSH"), argv[0]), loglevel=LOG_ERROR)
-        sys.exit(255)
+            Please use BINARY_SSH, BINARY_DIR, or change the way
+            repassh is invoked (eg, a different argv[0]) to make
+            it work correctly.""")
+
+            config.print(message.format(config.get("BINARY_SSH"), argv[0]), loglevel=LOG_ERROR)
+            config.exit(255)
 
     parse_command_line(argv, config)
     identity = find_identity(argv, config)
