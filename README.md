@@ -177,6 +177,15 @@ To have multiple identities:
    # need it.
 
    # "DEFAULT_IDENTITY": "foo",
+
+   # Use running `ssh-agent`, true by default
+   # If `SSH_AUTH_SOCK` and `SSH_AGENT_PID` environment variables are set
+   # and the agent responds then it will be used instead of executing a new
+   # one based on identity matching.
+   # If the agent does not respond, a new one is started just like
+   # `USE_RUNNING_AGENT` would be false.
+
+   # "USE_RUNNING_AGENT": true,
   
    # This is optional - don't include any SSH_ADD_OPTIONS if you don't
    # need it.

@@ -63,6 +63,9 @@ class Config:
         # the current working directory and/or argv.
         "DEFAULT_IDENTITY": "$USER",
 
+        # Use running `ssh-agent` if environment variables are set
+        "USE_RUNNING_AGENT": True,
+
         # Those should really be overridden by the user. Look
         # at the documentation for more details.
         "MATCH_PATH": [],
@@ -89,8 +92,8 @@ class Config:
         "SYSEXIT": True,
     }
 
-    def __init__(self, cfg={}):
-        self.values = cfg
+    def __init__(self, cfg=None):
+        self.values = cfg if cfg is not None else {}
 
     def load(self):
         """Load configurations from the default user file."""
@@ -122,7 +125,8 @@ class Config:
 
         print("Parameter '{0}' needs to be defined in "
               "config file or defaults".format(parameter), file=sys.stderr)
-        self.exit(2)
+
+        return self.exit(2)
 
     def set(self, parameter, value):
         """Sets configuration option parameter to value."""
@@ -299,7 +303,7 @@ def get_session_tty():
 
     have a tty associated, while the same command without -t will not.
 
-    When ssh is invoked by tools like git or rsyn, its stdin and stdout
+    When ssh is invoked by tools like git or rsync, its stdin and stdout
     is often tied to a file descriptor which is not a terminal, has
     the tool wants to provide the input and process the output.
 
@@ -439,6 +443,14 @@ class AgentManager:
         Returns:
             string, path to the agent file.
         """
+        # check agent defined by environment variables
+        if (config.get("USE_RUNNING_AGENT")
+                and "SSH_AUTH_SOCK" in os.environ
+                and "SSH_AGENT_PID" in os.environ):
+            if AgentManager.is_agent_file_valid(None, config):
+                config.print("Env. agent is running")
+                return None  # use environment variables already set
+
         # Create the paths, if they do not exist yet.
         try:
             os.makedirs(path, 0o700)
@@ -451,6 +463,7 @@ class AgentManager:
         # Use the hostname as part of the path just in case this is on NFS.
         agentfile = os.path.join(
             path, "agent-{0}-{1}".format(identity, socket.gethostname()))
+
         if os.access(agentfile, os.R_OK) and AgentManager.is_agent_file_valid(agentfile, config):
             config.print("Agent for identity {0} ready".format(identity), file=sys.stderr,
                          loglevel=LOG_DEBUG)
@@ -469,8 +482,8 @@ class AgentManager:
         retval, _ = AgentManager.run_shell_command_in_agent(
             agentfile, "ssh-add -l >/dev/null 2>/dev/null")
         if retval & 0xff not in [0, 1]:
-            config.print("Agent in {0} not running".format(agentfile), file=sys.stderr,
-                         loglevel=LOG_DEBUG)
+            config.print("Agent {0} not running".format(agentfile or "default"),
+                         file=sys.stderr, loglevel=LOG_DEBUG)
             return False
 
         return True
@@ -486,8 +499,11 @@ class AgentManager:
     @staticmethod
     def run_shell_command_in_agent(agentfile, command, stdin=None, stdout=subprocess.PIPE):
         """Runs a shell command with an agent configured in the environment."""
-        command = ["/bin/sh", "-c",
-                   ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)]
+        if agentfile:
+            command = ["/bin/sh", "-c",
+                       ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)]
+        else:
+            command = ["/bin/sh", "-c", "{0}".format(command)]
         process = subprocess.Popen(command, stdin=stdin, stdout=stdout)
         stdout, _ = process.communicate()
         return process.wait(), stdout
@@ -516,14 +532,23 @@ class AgentManager:
         if self.ssh_config:
             additional_flags += " -F {0}".format(self.ssh_config)
 
-        command = [
-            "/bin/sh", self.get_shell_args(),
-            ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
-                self.agent_file, self.config.get("BINARY_SSH"),
-                additional_flags, self.escape_shell_arguments(argv))]
-        exit_code = os.spawnv(os.P_WAIT, "/bin/sh", command)
+        if self.agent_file:
+            command = [
+                "/bin/sh", self.get_shell_args(),
+                ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
+                    self.agent_file, self.config.get("BINARY_SSH"),
+                    additional_flags, self.escape_shell_arguments(argv))]
+        else:
+            # no agent file set, using environment variables
+            command = [
+                "/bin/sh", self.get_shell_args(),
+                "exec {0} {1} {2}".format(
+                    self.config.get("BINARY_SSH"), additional_flags,
+                    self.escape_shell_arguments(argv))]
 
-        return self.config.exit(exit_code)
+        process = subprocess.Popen(command, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+
+        return process.wait()
 
 
 def autodetect_binary(argv, config):
@@ -624,6 +649,7 @@ def autodetect_binary(argv, config):
 
 
 def check_exit(argv, config):
+    """Checks if `repassh` was invoked in a way that it should not use `sys.exit`."""
     # if `repassh` is used from `python` or `xonsh` `sys.exit` should not be used
     runtime_name = argv[0]
     binary_name = os.path.basename(runtime_name)
@@ -659,10 +685,12 @@ def parse_command_line(argv, config):
                 break
 
 
-def main(argv, cfg={}):
+def main(argv, cfg=None):
     """Main method"""
     # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
     # that use ssh in case we error out or similar.
+    if cfg is None:
+        cfg = {}
     try:
         sys.stdout = open("/dev/tty", "w")
         sys.stderr = open("/dev/tty", "w")
