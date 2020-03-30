@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "repassh"
-version = "1.0.2"
+version = "1.0.3"
 description = "SSH wrapper to load private keys on first execution"
 authors = ["Gyuri Horak <dyuri@horak.hu>"]
 repository = "https://github.com/dyuri/repassh"

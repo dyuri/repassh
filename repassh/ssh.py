@@ -444,12 +444,10 @@ class AgentManager:
             string, path to the agent file.
         """
         # check agent defined by environment variables
-        if (config.get("USE_RUNNING_AGENT")
-                and "SSH_AUTH_SOCK" in os.environ
-                and "SSH_AGENT_PID" in os.environ):
+        if config.get("USE_RUNNING_AGENT"):
             if AgentManager.is_agent_file_valid(None, config):
-                config.print("Env. agent is running")
-                return None  # use environment variables already set
+                config.print("Global agent is running")
+                return None  # use global agent
 
         # Create the paths, if they do not exist yet.
         try:
@@ -482,7 +480,7 @@ class AgentManager:
         retval, _ = AgentManager.run_shell_command_in_agent(
             agentfile, "ssh-add -l >/dev/null 2>/dev/null")
         if retval & 0xff not in [0, 1]:
-            config.print("Agent {0} not running".format(agentfile or "default"),
+            config.print("Agent {0} not running".format(agentfile or "*global*"),
                          file=sys.stderr, loglevel=LOG_DEBUG)
             return False
 
@@ -546,7 +544,7 @@ class AgentManager:
                     self.config.get("BINARY_SSH"), additional_flags,
                     self.escape_shell_arguments(argv))]
 
-        process = subprocess.Popen(command, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+        process = subprocess.Popen(command)
 
         return process.wait()
 
