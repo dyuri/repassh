@@ -522,7 +522,7 @@ class AgentManager:
 
         return shell_args
 
-    def run_ssh(self, argv):
+    def run_ssh(self, argv, stdin=None, stdout=None, stderr=None):
         """Execs ssh with the specified arguments."""
         additional_flags = self.config.get("SSH_OPTIONS").get(
             self.identity, self.config.get("SSH_DEFAULT_OPTIONS"))
@@ -544,7 +544,15 @@ class AgentManager:
                     self.config.get("BINARY_SSH"), additional_flags,
                     self.escape_shell_arguments(argv))]
 
-        process = subprocess.Popen(command)
+        kwargs = {}
+        if stdin is not None:
+            kwargs["stdin"] = stdin
+        if stdout is not None:
+            kwargs["stdout"] = stdout
+        if stderr is not None:
+            kwargs["stderr"] = stderr
+
+        process = subprocess.Popen(command, **kwargs)
 
         return process.wait()
 
@@ -734,4 +742,9 @@ def main(argv, cfg=None):
         # do not load keys in BatchMode
         agent.load_unloaded_keys(keys)
 
-    return agent.run_ssh(argv[1:])
+    return agent.run_ssh(
+        argv[1:],
+        cfg.get("stdin", None),
+        cfg.get("stdout", None),
+        cfg.get("stderr", None)
+    )
