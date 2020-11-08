@@ -39,6 +39,7 @@ In any case, `repassh`:
 - allows to specify different options for each set of keys. For example, you
   can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
   always ask for confirmation before using a key.
+- performs port knocking before attempting to connect via `ssh` if configured.
 
 
 ## Installation
