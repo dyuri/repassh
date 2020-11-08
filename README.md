@@ -1,6 +1,6 @@
 # repassh
 
-SSH wrapper to load private keys via `ssh-add` when they are first needed.
+SSH wrapper to load private keys via `ssh-add` when they are first needed, with port knocking support.
 
 Heavily based on [ssh-ident](https://github.com/ccontavalli/ssh-ident).
 
