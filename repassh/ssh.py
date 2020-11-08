@@ -14,6 +14,8 @@ import termios
 import textwrap
 import json
 
+from .knock import knock
+
 __all__ = ()
 
 LOG_ERROR = 1
@@ -71,6 +73,10 @@ class Config:
         "MATCH_PATH": [],
         "MATCH_ARGV": [],
 
+        # Path and argument matching for port knocking.
+        "KNOCK_PATH": [],
+        "KNOCK_ARGV": [],
+
         # Dictionary with identity as a key, allows to specify
         # per identity options when using ssh-add.
         "SSH_ADD_OPTIONS": {},
@@ -101,7 +107,8 @@ class Config:
         variables = {}
         try:
             variables = json.load(open(path))
-        except IOError:
+        except (IOError, json.JSONDecodeError) as e:
+            self.print(f"Error loading configuration!\n{e}")
             return self
 
         self.values.update(variables)
@@ -154,6 +161,25 @@ class Config:
         return exit_code
 
 
+def find_knock_params(args, knock_param_list):
+    """Matches knock params to a list of arguments.
+
+    Args:
+        args: iterable of strings to check
+        knock_param_list: iterable of (string, {string: ?}) where
+            the first string being a regular expression, the remaining
+            dict is used for knocking as kwargs
+
+    Returs:
+        Parameters for knocking.
+    """
+    for arg in args:
+        for regex, knock_params in knock_param_list:
+            if re.search(regex, arg):
+                return knock_params
+    return None
+
+
 def find_identity_in_list(elements, identities):
     """Matches a list of identities to a list of elements.
 
@@ -171,6 +197,23 @@ def find_identity_in_list(elements, identities):
             if re.search(regex, element):
                 return identity
     return None
+
+
+def portknock(argv, config):
+    """Performs port knocking if configured.
+
+    Args:
+        argv: iterable of string, the command line arguments
+        config: Config instance
+    """
+    paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
+    knock_params = (
+        find_knock_params(argv, config.get("KNOCK_ARGV")) or
+        find_knock_params(paths, config.get("KNOCK_PATH"))
+    )
+
+    if knock_params is not None:
+        knock(**knock_params, config=config)
 
 
 def find_identity(argv, config):
@@ -741,6 +784,8 @@ def main(argv, cfg=None):
     if not config.get("SSH_BATCH_MODE"):
         # do not load keys in BatchMode
         agent.load_unloaded_keys(keys)
+
+    portknock(argv, config)
 
     return agent.run_ssh(
         argv[1:],

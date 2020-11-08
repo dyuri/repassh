@@ -171,6 +171,27 @@ To have multiple identities:
        ("corp", "work")
      ],
   
+   # KNOCK_PATH and KNOCK_ARGV work the same way as MATCH_PATH and MATCH_ARGV,
+   # but instead of identity name you can provide port knocking configuration
+   # executed before the ssh connection attempt.
+   # Parameters:
+   # - host: hostname
+   # - ports: sequence of ports
+   # - delay: time to wait between knocks (ms) [0]
+   # - timeout: timeout for knocks (ms) [100]
+   # - use_udp: set for UDP knocks, TCP is used by default
+
+     "KNOCK_ARGV": [
+       [
+         "remotehost",
+         {
+           "host": "remotehost.domain.org",
+           "ports": [123, 234, 345],
+           "delay": 50
+         }
+       ]
+     ],
+
    # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
    # generally your loginname, no need to change it.
    # This is optional - don't include any DEFAULT_IDENTITY if you don't
