@@ -1,12 +1,12 @@
 """Helper function to start SSH agent and add keys using ssh-add
 """
 import collections
-import distutils.spawn
 import errno
 import fcntl
 import getpass
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -673,10 +673,10 @@ def autodetect_binary(argv, config):
         p for p in normalized_path if p != ssh_ident_path])
 
     # Find an executable with the desired name.
-    binary_path = distutils.spawn.find_executable(binary_name, search_path)
+    binary_path = shutil.which(binary_name, path=search_path)
     if not binary_path:
         # Nothing found. Try to find something named 'ssh'.
-        binary_path = distutils.spawn.find_executable('ssh')
+        binary_path = shutil.which('ssh')
 
     if binary_path:
         config.set("BINARY_SSH", binary_path)
@@ -757,11 +757,11 @@ def main(argv, cfg=None):
     # which is not always the case. argv[0] may also just have the binary
     # name if found in a path.
     binary_path = os.path.realpath(
-        distutils.spawn.find_executable(config.get("BINARY_SSH")))
+        shutil.which(config.get("BINARY_SSH")))
 
     if argv[0]:
         ssh_ident_path = os.path.realpath(
-            distutils.spawn.find_executable(argv[0]))
+            shutil.which(argv[0]))
         if binary_path == ssh_ident_path:
             message = textwrap.dedent("""\
             repassh found '{0}' as the next command to run.
