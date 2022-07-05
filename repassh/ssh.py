@@ -734,6 +734,15 @@ def parse_command_line(argv, config):
                 break
 
 
+def get_agent_file():
+    config = Config({}).load()
+    identity = find_identity([], config)
+    sshconfig = find_ssh_config(identity, config)
+    agent = AgentManager(identity, sshconfig, config)
+
+    return agent.agent_file
+
+
 def main(argv, cfg=None):
     """Main method"""
     # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
